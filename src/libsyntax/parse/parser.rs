@@ -3505,52 +3505,44 @@ impl<'a> Parser<'a> {
                         self.bump();
                         pat = PatStruct(enum_path, fields, etc);
                     }
-                    _ => {
-                        let mut args: Vec<P<Pat>> = Vec::new();
-                        match self.token {
-                          token::OpenDelim(token::Paren) => {
-                            let is_dotdot = self.look_ahead(1, |t| {
-                                match *t {
-                                    token::DotDot => true,
-                                    _ => false,
-                                }
-                            });
-                            if is_dotdot {
-                                // This is a "top constructor only" pat
-                                self.bump();
-                                self.bump();
-                                self.expect(&token::CloseDelim(token::Paren));
-                                pat = PatEnum(enum_path, None);
-                            } else {
-                                args = self.parse_enum_variant_seq(
-                                    &token::OpenDelim(token::Paren),
-                                    &token::CloseDelim(token::Paren),
-                                    seq_sep_trailing_allowed(token::Comma),
-                                    |p| p.parse_pat()
-                                );
-                                pat = PatEnum(enum_path, Some(args));
+                    token::OpenDelim(token::Paren) => {
+                        let is_dotdot = self.look_ahead(1, |t| {
+                            match *t {
+                                token::DotDot => true,
+                                _ => false,
                             }
-                          },
-                          _ => {
-                              if !enum_path.global &&
-                                  enum_path.segments.len() == 1 &&
-                                  enum_path.segments[0].parameters.is_empty()
-                              {
-                                // NB: If enum_path is a single identifier,
-                                // this should not be reachable due to special
-                                // handling further above.
-                                //
-                                // However, previously a PatIdent got emitted
-                                // here, so we preserve the branch just in case.
-                                //
-                                // A rewrite of the logic in this function
-                                // would probably make this obvious.
-                                self.span_bug(enum_path.span,
-                                              "ident only path should have been covered already");
-                              } else {
-                                  pat = PatEnum(enum_path, Some(args));
-                              }
-                          }
+                        });
+                        if is_dotdot {
+                            // This is a "top constructor only" pat
+                            self.bump();
+                            self.bump();
+                            self.expect(&token::CloseDelim(token::Paren));
+                            pat = PatEnum(enum_path, None);
+                        } else {
+                            let args = self.parse_enum_variant_seq(
+                                &token::OpenDelim(token::Paren),
+                                &token::CloseDelim(token::Paren),
+                                seq_sep_trailing_allowed(token::Comma),
+                                |p| p.parse_pat()
+                            );
+                            pat = PatEnum(enum_path, Some(args));
+                        }
+                    }
+                    _ => {
+                        if !enum_path.global &&
+                            enum_path.segments.len() == 1 &&
+                            enum_path.segments[0].parameters.is_empty()
+                        {
+                            // We expect an identifier, but due to
+                            // `can_be_enum_or_struct` is true above,
+                            // we reach here instead.
+                            let tok_str = pprust::path_to_string(&enum_path);
+                            self.span_fatal(
+                                enum_path.span,
+                                &format!("expected identifier, found enum or struct `{}`",
+                                         tok_str));
+                        } else {
+                            pat = PatEnum(enum_path, Some(Vec::new()));
                         }
                     }
                 }
